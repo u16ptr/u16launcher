@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+const unsigned int WINDOW_BORDER_WIDTH = 2;
+const unsigned int PANEL_WIDTH = 240;
+const unsigned int PANEL_HEIGHT = 48;
+const unsigned int PANEL_BOTTOM_OFFSET = 0;
 const char* X_DISPLAY_NAME = ":0";
 
 int main()
@@ -25,10 +29,10 @@ int main()
   printf("Height: %d\n", screenHeight);
 
   Window testWindow;
-  int windowX = 16;
-  int windowY = 16;
-  unsigned int windowWidth = 128;
-  unsigned int windowHeight = 128;
+  int windowX = screenWidth / 2 - PANEL_WIDTH / 2;
+  int windowY = screenHeight - PANEL_HEIGHT - PANEL_BOTTOM_OFFSET;
+  unsigned int windowWidth = PANEL_WIDTH;
+  unsigned int windowHeight = PANEL_HEIGHT;
 
   testWindow = XCreateSimpleWindow(
     display,
@@ -37,14 +41,23 @@ int main()
     windowY,
     windowWidth,
     windowHeight,
-    0,
+    WINDOW_BORDER_WIDTH,
     BlackPixel(display, screenNum),
     WhitePixel(display, screenNum)
   );
-  XMapWindow(display, testWindow);
-  XSync(display, false);
 
-  sleep(5);
+  XSetWindowAttributes windowAttributes;
+  windowAttributes.override_redirect = true;
+  XChangeWindowAttributes(display, testWindow, CWOverrideRedirect, &windowAttributes);
+
+  XSelectInput(display, testWindow, KeyPressMask);
+  XMapWindow(display, testWindow);
+
+  XEvent event;
+  while (true)
+  {
+    XNextEvent(display, &event);
+  }
 
   XCloseDisplay(display);
   return EXIT_SUCCESS;
