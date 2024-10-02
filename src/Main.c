@@ -6,14 +6,15 @@
 #include <stdint.h>
 #include <unistd.h>
 
-const unsigned int WINDOW_BORDER_WIDTH = 2;
-const unsigned int PANEL_PADDING = 4;
-const unsigned int ICON_COUNT = 5;
+const unsigned int WINDOW_BORDER_WIDTH = 1;
+const unsigned int GAP_SIZE = 4;
+const unsigned int ICON_COUNT = 9;
 const unsigned int ICON_SIZE = 40;
-const unsigned int ICON_GAP = 4;
-const unsigned int PANEL_WIDTH = PANEL_PADDING * 2 + (ICON_COUNT - 1) * ICON_GAP + ICON_COUNT * ICON_SIZE;
-const unsigned int PANEL_HEIGHT = ICON_SIZE + 2 * PANEL_PADDING;
+const unsigned int PANEL_WIDTH = GAP_SIZE * 2 + (ICON_COUNT - 1) * GAP_SIZE + ICON_COUNT * ICON_SIZE;
+const unsigned int PANEL_HEIGHT = ICON_SIZE + 2 * GAP_SIZE;
 const unsigned int PANEL_BOTTOM_OFFSET = 0;
+const unsigned int ITEM_WIDTH = 160;
+const unsigned int ITEM_HEIGHT = 32;
 const bool SHOW_UNDER = false;
 const char* X_DISPLAY_NAME = ":0";
 
@@ -65,10 +66,10 @@ int main()
     RootWindow(display, screenNum),
     0,
     0,
-    200,
-    200,
-    0,
-    WhitePixel(display, screenNum),
+    ITEM_WIDTH,
+    ITEM_HEIGHT * 1,
+    WINDOW_BORDER_WIDTH,
+    cBorder,
     BlackPixel(display, screenNum)
   );
 
@@ -85,7 +86,7 @@ int main()
 
   if (SHOW_UNDER) XLowerWindow(display, panelWindow);
   XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask);
-  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask);
+  XSelectInput(display, menuWindow, ExposureMask | KeymapStateMask | ButtonPressMask);
   XMapWindow(display, panelWindow);
   XClearWindow(display, panelWindow);
 
@@ -103,18 +104,35 @@ int main()
       {
         if (showMenu)
         {
-          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - 200);
+          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
         }
         else {
-          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - 200);
+          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
           XMapRaised(display, menuWindow);
           showMenu = true;
         }
       }
-      else if (showMenu)
+      else if (event.xbutton.button == Button1)
       {
-        XUnmapWindow(display, menuWindow);
-        showMenu = false;
+        if (event.xbutton.window == menuWindow)
+        {
+          break;
+        }
+        if (showMenu)
+        {
+          XUnmapWindow(display, menuWindow);
+          showMenu = false;
+        }
+        else {
+          int iconIndex = 0;
+          int xOffset = event.xbutton.x;
+          if (
+            xOffset > GAP_SIZE + GAP_SIZE / 2 + ICON_SIZE
+          )
+          { iconIndex = (xOffset - GAP_SIZE / 2) / (ICON_SIZE + GAP_SIZE); }
+          if (iconIndex == ICON_COUNT) iconIndex--;
+          printf("%d\n", iconIndex);
+        }
       }
     }
   }
@@ -131,9 +149,9 @@ void renderIcons(Display* display, Window* window, GC* graphicsContext)
 
   for (int i = 0; i < ICON_COUNT; i++)
   {
-    int iconSize = PANEL_HEIGHT - 2 * PANEL_PADDING;
-    int iconX = i * (iconSize + ICON_GAP) + PANEL_PADDING;
-    int iconY = PANEL_PADDING;
+    int iconSize = PANEL_HEIGHT - 2 * GAP_SIZE;
+    int iconX = i * (iconSize + GAP_SIZE) + GAP_SIZE;
+    int iconY = GAP_SIZE;
     XFillRectangle(
       display,
       *window,
