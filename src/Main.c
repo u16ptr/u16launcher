@@ -1,4 +1,5 @@
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -38,6 +39,8 @@ int main()
   printf("Height: %d\n", screenHeight);
 
   Window panelWindow;
+  Window menuWindow;
+
   int windowX = screenWidth / 2 - PANEL_WIDTH / 2;
   int windowY = screenHeight - PANEL_HEIGHT - PANEL_BOTTOM_OFFSET - WINDOW_BORDER_WIDTH;
   unsigned int windowWidth = PANEL_WIDTH;
@@ -57,6 +60,17 @@ int main()
     cBorder,
     cBackground
   );
+  menuWindow = XCreateSimpleWindow(
+    display,
+    RootWindow(display, screenNum),
+    0,
+    0,
+    200,
+    200,
+    0,
+    WhitePixel(display, screenNum),
+    BlackPixel(display, screenNum)
+  );
 
   GC graphicsContext;
   graphicsContext = XCreateGC(display, panelWindow, 0, 0);
@@ -65,16 +79,44 @@ int main()
   windowAttributes.override_redirect = true;
   XChangeWindowAttributes(display, panelWindow, CWOverrideRedirect, &windowAttributes);
 
+  XSetWindowAttributes menuAttributes;
+  menuAttributes.override_redirect = true;
+  XChangeWindowAttributes(display, menuWindow, CWOverrideRedirect, &menuAttributes);
+
   if (SHOW_UNDER) XLowerWindow(display, panelWindow);
-  XSelectInput(display, panelWindow, ExposureMask | KeyPressMask);
+  XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask);
+  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask);
   XMapWindow(display, panelWindow);
   XClearWindow(display, panelWindow);
 
   XEvent event;
+  bool showMenu = false;
+
   while (true)
   {
     XNextEvent(display, &event);
     renderIcons(display, &panelWindow, &graphicsContext);
+
+    if (event.type == ButtonPress)
+    {
+      if (event.xbutton.button == Button3)
+      {
+        if (showMenu)
+        {
+          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - 200);
+        }
+        else {
+          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - 200);
+          XMapRaised(display, menuWindow);
+          showMenu = true;
+        }
+      }
+      else if (showMenu)
+      {
+        XUnmapWindow(display, menuWindow);
+        showMenu = false;
+      }
+    }
   }
 
   XFreeGC(display, graphicsContext);
