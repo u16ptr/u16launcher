@@ -18,7 +18,8 @@ const unsigned int ITEM_HEIGHT = 32;
 const bool SHOW_UNDER = false;
 const char* X_DISPLAY_NAME = ":0";
 
-void renderIcons(Display* display, Window* window, GC* graphicsContext);
+int calculateIconIndexFromMouseX(int relMouseX);
+void renderIcons(Display* display, Window* window, GC* graphicsContext, int hoveredIndex);
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
 
 int main()
@@ -85,7 +86,7 @@ int main()
   XChangeWindowAttributes(display, menuWindow, CWOverrideRedirect, &menuAttributes);
 
   if (SHOW_UNDER) XLowerWindow(display, panelWindow);
-  XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask);
+  XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask | PointerMotionMask | LeaveWindowMask);
   XSelectInput(display, menuWindow, ExposureMask | KeymapStateMask | ButtonPressMask);
   XMapWindow(display, panelWindow);
   XClearWindow(display, panelWindow);
@@ -93,10 +94,32 @@ int main()
   XEvent event;
   bool showMenu = false;
 
+  int hoveredIndex = -1;
+
   while (true)
   {
     XNextEvent(display, &event);
-    renderIcons(display, &panelWindow, &graphicsContext);
+
+    if (event.type == Expose)
+    {
+      renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
+    }
+
+    if (event.type == MotionNotify && event.xmotion.window == panelWindow)
+    {
+      int calculatedIndex = calculateIconIndexFromMouseX(event.xmotion.x);
+      if (calculatedIndex != hoveredIndex)
+      {
+        hoveredIndex = calculatedIndex;
+        renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
+      }
+    }
+
+    if (event.type == LeaveNotify)
+    {
+      hoveredIndex = -1;
+      renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
+    }
 
     if (event.type == ButtonPress)
     {
@@ -124,13 +147,7 @@ int main()
           showMenu = false;
         }
         else {
-          int iconIndex = 0;
-          int xOffset = event.xbutton.x;
-          if (
-            xOffset > GAP_SIZE + GAP_SIZE / 2 + ICON_SIZE
-          )
-          { iconIndex = (xOffset - GAP_SIZE / 2) / (ICON_SIZE + GAP_SIZE); }
-          if (iconIndex == ICON_COUNT) iconIndex--;
+          int iconIndex = calculateIconIndexFromMouseX(event.xbutton.x);
           printf("%d\n", iconIndex);
         }
       }
@@ -142,16 +159,30 @@ int main()
   return EXIT_SUCCESS;
 }
 
-void renderIcons(Display* display, Window* window, GC* graphicsContext)
+void renderIcons(Display* display, Window* window, GC* graphicsContext, int hoveredIndex)
 {
   XClearWindow(display, *window);
-  XSetForeground(display, *graphicsContext, calculateRGB(128, 0, 0));
+
+  int rootX, rootY;
+  int winX, winY;
+  Window rootReturn, childReturn;
+  unsigned int mask;
 
   for (int i = 0; i < ICON_COUNT; i++)
   {
     int iconSize = PANEL_HEIGHT - 2 * GAP_SIZE;
     int iconX = i * (iconSize + GAP_SIZE) + GAP_SIZE;
     int iconY = GAP_SIZE;
+
+    if (i == hoveredIndex)
+    {
+      XSetForeground(display, *graphicsContext, calculateRGB(0, 128, 0));
+    }
+    else
+    {
+      XSetForeground(display, *graphicsContext, calculateRGB(128, 0, 0));
+    }
+
     XFillRectangle(
       display,
       *window,
@@ -162,6 +193,18 @@ void renderIcons(Display* display, Window* window, GC* graphicsContext)
       iconSize
     );
   }
+}
+
+int calculateIconIndexFromMouseX(int relMouseX)
+{
+  int iconIndex = 0;
+  if (relMouseX < 0) { return -1; }
+  if (
+    relMouseX > GAP_SIZE + GAP_SIZE / 2 + ICON_SIZE
+  )
+  { iconIndex = (relMouseX - GAP_SIZE / 2) / (ICON_SIZE + GAP_SIZE); }
+  if (iconIndex == ICON_COUNT) iconIndex--;
+  return iconIndex;
 }
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
