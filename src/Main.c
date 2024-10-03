@@ -6,197 +6,289 @@
 #include <stdint.h>
 #include <unistd.h>
 
+// Global Variables
+Display* display;
+Window panelWindow;
+Window menuWindow;
+GC panelGC;
+
+// Colors
+unsigned long cPanelBackground;
+unsigned long cPanelBorder;
+unsigned long cMenuBackground;
+unsigned long cMenuBorder;
+unsigned long cIconHover;
+unsigned long cIconBackground;
+
+// Dimensions
 const unsigned int WINDOW_BORDER_WIDTH = 1;
-const unsigned int GAP_SIZE = 4;
-const unsigned int ICON_COUNT = 9;
-const unsigned int ICON_SIZE = 40;
-const unsigned int PANEL_WIDTH = GAP_SIZE * 2 + (ICON_COUNT - 1) * GAP_SIZE + ICON_COUNT * ICON_SIZE;
-const unsigned int PANEL_HEIGHT = ICON_SIZE + 2 * GAP_SIZE;
+const unsigned int GAP_SIZE            = 4;
+const unsigned int ICON_COUNT          = 9;
+const unsigned int ICON_SIZE           = 40;
+const unsigned int PANEL_WIDTH         = GAP_SIZE * 2 + (ICON_COUNT - 1) * GAP_SIZE + ICON_COUNT * ICON_SIZE;
+const unsigned int PANEL_HEIGHT        = ICON_SIZE + 2 * GAP_SIZE;
 const unsigned int PANEL_BOTTOM_OFFSET = 0;
-const unsigned int ITEM_WIDTH = 160;
-const unsigned int ITEM_HEIGHT = 32;
-const bool SHOW_UNDER = false;
+const unsigned int ITEM_WIDTH          = 160;
+const unsigned int ITEM_HEIGHT         = 32;
+
+// Window and X11 Settings
+const bool  SHOW_UNDER     = false;
 const char* X_DISPLAY_NAME = ":0";
 
+// Debugging
+const bool DEBUG_FUNCTIONS = true;
+
+// Initializer Functions
+void initializeColors();
+void initializeDisplay();
+void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBorder);
+void initializePanel(int screenNum, int panelX, int panelY, unsigned long cBackground, unsigned int cBorder);
+
+// Visibility Functions
+void showPanel();
+void showMenu();
+void showMenuAt(int x, int y);
+void hideMenu();
+
+// Render Functions
+void renderIconAtIndex(int index);
+void renderHoverAtIndex(int index);
+void renderIcons(int hoveredIndex);
+
+// Calculation Functions
 int calculateIconIndexFromMouseX(int relMouseX);
-void renderIcons(Display* display, Window* window, GC* graphicsContext, int hoveredIndex);
+
+// Utility Functions
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
+
+// Cleanup Functions
+void freeObjects();
 
 int main()
 {
-  Display* display;
-  display = XOpenDisplay(X_DISPLAY_NAME);
-
-  if (display == NULL)
-  {
-    fprintf(stderr, "Cannot connect to X server: %s!\n", X_DISPLAY_NAME);
-    return EXIT_FAILURE;
-  }
+  initializeColors();
+  initializeDisplay();
 
   int screenNum = DefaultScreen(display);
   int screenWidth = DisplayWidth(display, screenNum);
   int screenHeight = DisplayHeight(display, screenNum);
 
-  printf("Width: %d\n", screenWidth);
-  printf("Height: %d\n", screenHeight);
+  printf("%lu\n", cPanelBackground);
 
-  Window panelWindow;
-  Window menuWindow;
+  initializePanel(
+    screenNum,
+    screenWidth / 2 - PANEL_WIDTH / 2,
+    screenHeight - PANEL_HEIGHT - PANEL_BOTTOM_OFFSET - WINDOW_BORDER_WIDTH,
+    cPanelBackground,
+    cPanelBorder
+  );
+  initializeMenu(
+    screenNum,
+    cPanelBackground,
+    cPanelBorder
+  );
+  showPanel();
 
-  int windowX = screenWidth / 2 - PANEL_WIDTH / 2;
-  int windowY = screenHeight - PANEL_HEIGHT - PANEL_BOTTOM_OFFSET - WINDOW_BORDER_WIDTH;
-  unsigned int windowWidth = PANEL_WIDTH;
-  unsigned int windowHeight = PANEL_HEIGHT;
+  XEvent event;
+  int hoveredIndex = -1;
+  bool menuShown = false;
 
-  unsigned long cBackground = calculateRGB(17, 17, 17);
-  unsigned long cBorder = calculateRGB(139, 212, 156);
+  while (true)
+  {
+    XNextEvent(display, &event);
+    switch (event.type)
+    {
+      case Expose:
+        {
+          if (event.xexpose.window != panelWindow) break;
+          renderIcons(-1);
+          break;
+        }
+      case MotionNotify:
+        {
+          if (event.xmotion.window != panelWindow || menuShown) break;
+          int calculatedIndex = calculateIconIndexFromMouseX(event.xmotion.x);
+          if (hoveredIndex != calculatedIndex)
+          {
+            renderIconAtIndex(hoveredIndex);
+            hoveredIndex = calculatedIndex;
+          }
+          renderHoverAtIndex(hoveredIndex);
+          break;
+        }
+      case LeaveNotify:
+        {
+          renderIconAtIndex(hoveredIndex);
+          hoveredIndex = -1;
+          break;
+        }
+      case ButtonPress:
+        {
+          if (event.xbutton.button == Button1)
+          {
+            if (!menuShown) break;
+            hideMenu();
+            menuShown = false;
+          }
+          else if (event.xbutton.button == Button3)
+          {
+            showMenuAt(event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
+            menuShown = true;
+          }
+          break;
+        }
+    }
+  }
 
+  freeObjects();
+  return EXIT_SUCCESS;
+}
+
+void initializeColors()
+{
+  cPanelBackground = calculateRGB(17, 17, 17);
+  cPanelBorder = calculateRGB(139, 212, 156);
+  cMenuBackground = calculateRGB(17, 17, 17);
+  cMenuBorder = calculateRGB(139, 212, 156);
+  cIconBackground = calculateRGB(34, 34, 34);
+  cIconHover = calculateRGB(51, 51, 51);
+}
+
+void initializeDisplay()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  display = XOpenDisplay(X_DISPLAY_NAME);
+  if (display == NULL)
+  {
+    fprintf(stderr, "Cannot connect to X server: %s!\n", X_DISPLAY_NAME);
+    exit(EXIT_FAILURE);
+  }
+}
+
+void initializePanel(int screenNum, int panelX, int panelY, unsigned long cBackground, unsigned int cBorder)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   panelWindow = XCreateSimpleWindow(
     display,
     RootWindow(display, screenNum),
-    windowX,
-    windowY,
-    windowWidth,
-    windowHeight,
+    panelX,
+    panelY,
+    PANEL_WIDTH,
+    PANEL_HEIGHT,
     WINDOW_BORDER_WIDTH,
     cBorder,
     cBackground
   );
+  panelGC = XCreateGC(display, panelWindow, 0, 0);
+
+  XSetWindowAttributes panelAttributes;
+  panelAttributes.override_redirect = true;
+  XChangeWindowAttributes(display, panelWindow, CWOverrideRedirect, &panelAttributes);
+  XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask | PointerMotionMask | LeaveWindowMask);
+
+  if (SHOW_UNDER) XLowerWindow(display, panelWindow);
+}
+
+void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBorder)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   menuWindow = XCreateSimpleWindow(
     display,
     RootWindow(display, screenNum),
     0,
     0,
     ITEM_WIDTH,
-    ITEM_HEIGHT * 1,
+    ITEM_HEIGHT,
     WINDOW_BORDER_WIDTH,
     cBorder,
-    BlackPixel(display, screenNum)
+    cBackground
   );
-
-  GC graphicsContext;
-  graphicsContext = XCreateGC(display, panelWindow, 0, 0);
-
-  XSetWindowAttributes windowAttributes;
-  windowAttributes.override_redirect = true;
-  XChangeWindowAttributes(display, panelWindow, CWOverrideRedirect, &windowAttributes);
 
   XSetWindowAttributes menuAttributes;
   menuAttributes.override_redirect = true;
   XChangeWindowAttributes(display, menuWindow, CWOverrideRedirect, &menuAttributes);
-
-  if (SHOW_UNDER) XLowerWindow(display, panelWindow);
-  XSelectInput(display, panelWindow, ExposureMask | ButtonPressMask | PointerMotionMask | LeaveWindowMask);
-  XSelectInput(display, menuWindow, ExposureMask | KeymapStateMask | ButtonPressMask);
-  XMapWindow(display, panelWindow);
-  XClearWindow(display, panelWindow);
-
-  XEvent event;
-  bool showMenu = false;
-
-  int hoveredIndex = -1;
-
-  while (true)
-  {
-    XNextEvent(display, &event);
-
-    if (event.type == Expose)
-    {
-      renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
-    }
-
-    if (event.type == MotionNotify && event.xmotion.window == panelWindow)
-    {
-      int calculatedIndex = calculateIconIndexFromMouseX(event.xmotion.x);
-      if (calculatedIndex != hoveredIndex)
-      {
-        hoveredIndex = calculatedIndex;
-        renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
-      }
-    }
-
-    if (event.type == LeaveNotify)
-    {
-      hoveredIndex = -1;
-      renderIcons(display, &panelWindow, &graphicsContext, hoveredIndex);
-    }
-
-    if (event.type == ButtonPress)
-    {
-      if (event.xbutton.button == Button3)
-      {
-        if (showMenu)
-        {
-          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
-        }
-        else {
-          XMoveWindow(display, menuWindow, event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
-          XMapRaised(display, menuWindow);
-          showMenu = true;
-        }
-      }
-      else if (event.xbutton.button == Button1)
-      {
-        if (event.xbutton.window == menuWindow)
-        {
-          break;
-        }
-        if (showMenu)
-        {
-          XUnmapWindow(display, menuWindow);
-          showMenu = false;
-        }
-        else {
-          int iconIndex = calculateIconIndexFromMouseX(event.xbutton.x);
-          printf("%d\n", iconIndex);
-        }
-      }
-    }
-  }
-
-  XFreeGC(display, graphicsContext);
-  XCloseDisplay(display);
-  return EXIT_SUCCESS;
+  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask);
 }
 
-void renderIcons(Display* display, Window* window, GC* graphicsContext, int hoveredIndex)
+void showPanel()
 {
-  XClearWindow(display, *window);
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XMapWindow(display, panelWindow);
+  XClearWindow(display, panelWindow);
+}
+
+void showMenu()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XMapWindow(display, menuWindow);
+  XClearWindow(display, menuWindow);
+}
+
+void showMenuAt(int x, int y)
+{
+  XMoveWindow(display, menuWindow, x, y);
+  showMenu();
+}
+
+void hideMenu()
+{
+  XUnmapWindow(display, menuWindow);
+}
+
+void renderIconAtIndex(int index)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
+  int iconY = GAP_SIZE;
+  XFillRectangle(
+    display,
+    panelWindow,
+    panelGC,
+    iconX,
+    iconY,
+    ICON_SIZE,
+    ICON_SIZE
+  );
+}
+
+void renderHoverAtIndex(int index)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  int hoverX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
+  int hoverY = GAP_SIZE;
+  XSetForeground(display, panelGC, cIconHover);
+  XFillRectangle(
+    display,
+    panelWindow,
+    panelGC,
+    hoverX,
+    hoverY,
+    ICON_SIZE,
+    ICON_SIZE
+  );
+  XSetForeground(display, panelGC, cIconBackground);
+}
+
+void renderIcons(int hoveredIndex)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XClearWindow(display, panelWindow);
 
   int rootX, rootY;
   int winX, winY;
   Window rootReturn, childReturn;
   unsigned int mask;
 
+  XSetForeground(display, panelGC, cIconBackground);
   for (int i = 0; i < ICON_COUNT; i++)
   {
-    int iconSize = PANEL_HEIGHT - 2 * GAP_SIZE;
-    int iconX = i * (iconSize + GAP_SIZE) + GAP_SIZE;
-    int iconY = GAP_SIZE;
-
-    if (i == hoveredIndex)
-    {
-      XSetForeground(display, *graphicsContext, calculateRGB(0, 128, 0));
-    }
-    else
-    {
-      XSetForeground(display, *graphicsContext, calculateRGB(128, 0, 0));
-    }
-
-    XFillRectangle(
-      display,
-      *window,
-      *graphicsContext,
-      iconX,
-      iconY,
-      iconSize,
-      iconSize
-    );
+    renderIconAtIndex(i);
   }
 }
 
 int calculateIconIndexFromMouseX(int relMouseX)
 {
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   int iconIndex = 0;
   if (relMouseX < 0) { return -1; }
   if (
@@ -209,5 +301,13 @@ int calculateIconIndexFromMouseX(int relMouseX)
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
 {
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   return blue + (green << 8) + (red << 16);
+}
+
+void freeObjects()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XFreeGC(display, panelGC);
+  XCloseDisplay(display);
 }
