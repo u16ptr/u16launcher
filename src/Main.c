@@ -103,6 +103,7 @@ struct IconNode* createIcon(const char* name);
 void             addIcon(const char* name);
 struct IconNode* getIconByIndex(int index);
 unsigned int     getIconCount();
+void             removeIconByIndex(int index);
 
 // Icon Linked List
 struct IconNode* iconList = NULL;
@@ -154,6 +155,7 @@ int main()
   XEvent event;
   int hoveredPanelIndex = -1;
   int hoveredMenuIndex = -1;
+  int lastClickedPanelIndex = -1;
   struct CurrentMenu currentMenu =
   {
     .texts = NULL,
@@ -235,6 +237,13 @@ int main()
               int actionIndex = event.xbutton.y / ITEM_HEIGHT;
               if (currentMenu.id == iconMenuId)
               {
+                if (actionIndex == 0)
+                {
+                  removeIconByIndex(lastClickedPanelIndex);
+                  iconCount--;
+                  lastClickedPanelIndex = -1;
+                  refreshPanel(iconCount, screenWidth, screenHeight);
+                }
                 hideMenu();
                 menuShown = false;
                 hoveredMenuIndex = -1;
@@ -280,6 +289,7 @@ int main()
               currentMenu.id = iconMenuId;
             }
             showMenuAt(event.xbutton.x_root, event.xbutton.y_root, *currentMenu.texts, currentMenu.itemCount);
+            lastClickedPanelIndex = calculateIconIndexFromMouseX(event.xbutton.x, iconCount);
             menuShown = true;
           }
           break;
@@ -630,6 +640,30 @@ unsigned int getIconCount()
     current = current->next;
   }
   return count;
+}
+
+void removeIconByIndex(int index)
+{
+  struct IconNode* temporary = iconList;
+  if (temporary == NULL) return;
+  if (index == 0)
+  {
+    temporary = temporary->next;
+    free(iconList);
+    iconList = temporary;
+    return;
+  }
+  int currentIndex = 0;
+  struct IconNode* previous = iconList;
+  while (currentIndex != index)
+  {
+    if (temporary == NULL) return;
+    previous = temporary;
+    temporary = temporary->next;
+    currentIndex++;
+  }
+  previous->next = temporary->next;
+  free(temporary);
 }
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
