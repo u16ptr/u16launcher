@@ -18,6 +18,7 @@ GC menuGC;
 unsigned long cPanelBackground;
 unsigned long cPanelBorder;
 unsigned long cMenuBackground;
+unsigned long cMenuForeground;
 unsigned long cMenuBorder;
 unsigned long cIconHover;
 unsigned long cIconBackground;
@@ -32,6 +33,7 @@ const unsigned int PANEL_HEIGHT        = ICON_SIZE + 2 * GAP_SIZE;
 const unsigned int PANEL_BOTTOM_OFFSET = 0;
 const unsigned int ITEM_WIDTH          = 160;
 const unsigned int ITEM_HEIGHT         = 24;
+const unsigned int ITEM_COUNT          = 3;
 
 // Texts
 const char* TERMINATE_TEXT = "Terminate u16panel";
@@ -53,15 +55,19 @@ void initializePanel(int screenNum, int panelX, int panelY, unsigned long cBackg
 void showPanel();
 void showMenu();
 void showMenuAt(int x, int y);
+void clearMenu();
 void hideMenu();
 
 // Render Functions
 void renderIconAtIndex(int index);
-void renderHoverAtIndex(int index);
+void renderIconHoverAtIndex(int index);
 void renderIcons(int hoveredIndex);
+void renderMenuHoverAtIndex(int index);
+void renderMenuItems();
 
 // Calculation Functions
 int calculateIconIndexFromMouseX(int relMouseX);
+int calculateItemIndexFromMouseY(int relMouseY);
 
 // Utility Functions
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
@@ -95,7 +101,8 @@ int main()
   showPanel();
 
   XEvent event;
-  int hoveredIndex = -1;
+  int hoveredPanelIndex = -1;
+  int hoveredMenuIndex = -1;
   bool running = true;
   bool menuShown = false;
 
@@ -112,27 +119,40 @@ int main()
           }
           else if (event.xexpose.window == menuWindow)
           {
-            XDrawString(display, menuWindow, menuGC, 6, 16, TERMINATE_TEXT, strlen(TERMINATE_TEXT));
+            renderMenuItems(-1);
           }
           break;
         }
       case MotionNotify:
         {
-          if (event.xmotion.window != panelWindow || menuShown) break;
-          int calculatedIndex = calculateIconIndexFromMouseX(event.xmotion.x);
-          if (hoveredIndex != calculatedIndex)
+          if (event.xmotion.window == panelWindow && !menuShown)
           {
-            renderIconAtIndex(hoveredIndex);
-            hoveredIndex = calculatedIndex;
+            int calculatedIndex = calculateIconIndexFromMouseX(event.xmotion.x);
+            if (hoveredPanelIndex != calculatedIndex)
+            {
+              renderIconAtIndex(hoveredPanelIndex);
+              hoveredPanelIndex = calculatedIndex;
+              renderIconHoverAtIndex(hoveredPanelIndex);
+            }
           }
-          renderHoverAtIndex(hoveredIndex);
+          else if (event.xmotion.window == menuWindow)
+          {
+            int calculatedIndex = calculateItemIndexFromMouseY(event.xmotion.y);
+            if (hoveredMenuIndex != calculatedIndex)
+            {
+              hoveredMenuIndex = calculatedIndex;
+              clearMenu();
+              renderMenuHoverAtIndex(hoveredMenuIndex);
+              renderMenuItems();
+            }
+          }
           break;
         }
       case LeaveNotify:
         {
           XSetForeground(display, panelGC, cIconBackground);
-          renderIconAtIndex(hoveredIndex);
-          hoveredIndex = -1;
+          renderIconAtIndex(hoveredPanelIndex);
+          hoveredPanelIndex = -1;
           break;
         }
       case ButtonPress:
@@ -149,11 +169,12 @@ int main()
               if (!menuShown) break;
               hideMenu();
               menuShown = false;
+              hoveredMenuIndex = -1;
             }
           }
           else if (event.xbutton.button == Button3)
           {
-            showMenuAt(event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT);
+            showMenuAt(event.xbutton.x_root, event.xbutton.y_root - ITEM_HEIGHT * ITEM_COUNT);
             menuShown = true;
           }
           break;
@@ -170,6 +191,7 @@ void initializeColors()
   cPanelBackground = calculateRGB(17, 17, 17);
   cPanelBorder = calculateRGB(139, 212, 156);
   cMenuBackground = calculateRGB(17, 17, 17);
+  cMenuForeground = calculateRGB(255, 255, 255);
   cMenuBorder = calculateRGB(139, 212, 156);
   cIconBackground = calculateRGB(34, 34, 34);
   cIconHover = calculateRGB(51, 51, 51);
@@ -219,18 +241,18 @@ void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBord
     0,
     0,
     ITEM_WIDTH,
-    ITEM_HEIGHT,
+    ITEM_HEIGHT * ITEM_COUNT,
     WINDOW_BORDER_WIDTH,
     cBorder,
     cBackground
   );
   menuGC = XCreateGC(display, menuWindow, 0, 0);
-  XSetForeground(display, menuGC, calculateRGB(255, 255, 255));
+  XSetForeground(display, menuGC, cMenuForeground);
 
   XSetWindowAttributes menuAttributes;
   menuAttributes.override_redirect = true;
   XChangeWindowAttributes(display, menuWindow, CWOverrideRedirect, &menuAttributes);
-  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask);
+  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask | PointerMotionMask | LeaveWindowMask);
 }
 
 void showPanel()
@@ -250,6 +272,11 @@ void showMenuAt(int x, int y)
 {
   XMoveWindow(display, menuWindow, x, y);
   showMenu();
+}
+
+void clearMenu()
+{
+  XClearWindow(display, menuWindow);
 }
 
 void hideMenu()
@@ -273,7 +300,7 @@ void renderIconAtIndex(int index)
   );
 }
 
-void renderHoverAtIndex(int index)
+void renderIconHoverAtIndex(int index)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   int hoverX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
@@ -308,6 +335,30 @@ void renderIcons(int hoveredIndex)
   }
 }
 
+void renderMenuHoverAtIndex(int index)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  int hoverY = GAP_SIZE;
+  XFillRectangle(
+    display,
+    menuWindow,
+    panelGC,
+    0,
+    index * ITEM_HEIGHT,
+    ITEM_WIDTH,
+    ITEM_HEIGHT
+  );
+}
+
+void renderMenuItems()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  for (int i = 0; i < ITEM_COUNT; i++)
+  {
+    XDrawString(display, menuWindow, menuGC, 6, 16 + i * ITEM_HEIGHT, TERMINATE_TEXT, strlen(TERMINATE_TEXT));
+  }
+}
+
 int calculateIconIndexFromMouseX(int relMouseX)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
@@ -319,6 +370,14 @@ int calculateIconIndexFromMouseX(int relMouseX)
   { iconIndex = (relMouseX - GAP_SIZE / 2) / (ICON_SIZE + GAP_SIZE); }
   if (iconIndex == ICON_COUNT) iconIndex--;
   return iconIndex;
+}
+
+int calculateItemIndexFromMouseY(int relMouseY)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  if (relMouseY <= ITEM_HEIGHT) return 0;
+  if (relMouseY < 0 || relMouseY > ITEM_HEIGHT * ITEM_COUNT) return -1;
+  return relMouseY / ITEM_HEIGHT;
 }
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
