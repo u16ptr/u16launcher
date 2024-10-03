@@ -104,10 +104,10 @@ void             addIcon(const char* name);
 struct IconNode* getIconByIndex(int index);
 unsigned int     getIconCount();
 void             removeIconByIndex(int index);
+unsigned int     generateIconId();
 
 // Icon Linked List
 struct IconNode* iconList = NULL;
-unsigned int     currentIconId = -1;
 
 // Utility Functions
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
@@ -595,8 +595,7 @@ void addIcon(const char* name)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   struct IconNode* newNode = createIcon(name);
-  currentIconId++;
-  newNode->id = currentIconId;
+  newNode->id = generateIconId();
   if (iconList == NULL)
   {
     iconList = newNode;
@@ -644,6 +643,7 @@ unsigned int getIconCount()
 
 void removeIconByIndex(int index)
 {
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   struct IconNode* temporary = iconList;
   if (temporary == NULL) return;
   if (index == 0)
@@ -664,6 +664,27 @@ void removeIconByIndex(int index)
   }
   previous->next = temporary->next;
   free(temporary);
+}
+
+unsigned int generateIconId()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  int usedId = 0;
+  if (iconList == NULL) return usedId;
+  struct IconNode* current = iconList;
+  while (current != NULL)
+  {
+    if (current->id == usedId)
+    {
+      usedId++;
+      current = iconList;
+    }
+    else
+    {
+      current = current->next;
+    }
+  }
+  return usedId;
 }
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
