@@ -34,7 +34,8 @@ const unsigned int ITEM_WIDTH          = 160;
 const unsigned int ITEM_HEIGHT         = 24;
 
 // Limits
-const unsigned int ICON_NAME_LIMIT = 48;
+const unsigned int ICON_COUNT_LIMIT = 16;
+const unsigned int ICON_NAME_LIMIT  = 48;
 
 // Menu Texts
 const char**       panelMenuTexts;
@@ -75,6 +76,7 @@ void initializePanel(int screenNum, int panelX, int panelY, int panelWidth, unsi
 
 // Visibility Functions
 void showPanel();
+void refreshPanel(int iconCount, int screenWidth, int screenHeight);
 void showMenu();
 void showMenuAt(int x, int y, const char** menuTexts, unsigned int itemCount);
 void clearMenu();
@@ -88,6 +90,7 @@ void renderMenuHoverAtIndex(int index);
 void renderMenuItems(const char** menuItems, unsigned int itemCount);
 
 // Calculation Functions
+int calculatePanelWidth(int iconCount);
 int calculateIconIndexFromMouseX(int relMouseX, int iconCount);
 int calculateItemIndexFromMouseY(int relMouseY, unsigned int itemCount);
 
@@ -119,9 +122,10 @@ int main()
   addIcon(&iconList, "Icon 3");
   addIcon(&iconList, "Icon 4");
   addIcon(&iconList, "Icon 5");
-  int iconCount = getIconCount(iconList);
 
-  const int panelWidth = GAP_SIZE * 2 + (iconCount - 1) * GAP_SIZE + iconCount * ICON_SIZE;
+  int iconCount = getIconCount(iconList);
+  int panelWidth = calculatePanelWidth(iconCount);
+
   initializePanel(
     screenNum,
     screenWidth / 2 - panelWidth / 2,
@@ -223,16 +227,19 @@ int main()
               }
               else if (currentMenu.id == panelMenuId)
               {
-                if (actionIndex == 1)
+                if (actionIndex == 0 && iconCount < ICON_COUNT_LIMIT)
+                {
+                  addIcon(&iconList, "Icon");
+                  iconCount++;
+                  refreshPanel(iconCount, screenWidth, screenHeight);
+                }
+                else if (actionIndex == 1)
                 {
                   running = false;
                 }
-                else
-                {
-                  hideMenu();
-                  menuShown = false;
-                  hoveredMenuIndex = -1;
-                }
+                hideMenu();
+                menuShown = false;
+                hoveredMenuIndex = -1;
               }
               break;
             }
@@ -363,6 +370,25 @@ void showPanel()
   XClearWindow(display, panelWindow);
 }
 
+void refreshPanel(int iconCount, int screenWidth, int screenHeight)
+{
+  int panelWidth = calculatePanelWidth(iconCount);
+  printf("%d\n", panelWidth);
+  XResizeWindow(
+    display,
+    panelWindow,
+    panelWidth,
+    PANEL_HEIGHT
+  );
+  XMoveWindow(
+    display,
+    panelWindow,
+    screenWidth / 2 - panelWidth / 2,
+    screenHeight - PANEL_HEIGHT - PANEL_BOTTOM_OFFSET - WINDOW_BORDER_WIDTH
+  );
+  XClearWindow(display, panelWindow);
+}
+
 void showMenu()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
@@ -467,6 +493,11 @@ void renderMenuItems(const char** menuItems, unsigned int itemCount)
   {
     XDrawString(display, menuWindow, menuGC, 6, 16 + i * ITEM_HEIGHT, menuItems[i], strlen(menuItems[i]));
   }
+}
+
+int calculatePanelWidth(int iconCount)
+{
+  return GAP_SIZE * 2 + (iconCount - 1) * GAP_SIZE + iconCount * ICON_SIZE;
 }
 
 int calculateIconIndexFromMouseX(int relMouseX, int iconCount)
