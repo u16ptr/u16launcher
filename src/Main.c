@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 
 // Global Variables
@@ -11,6 +12,7 @@ Display* display;
 Window panelWindow;
 Window menuWindow;
 GC panelGC;
+GC menuGC;
 
 // Colors
 unsigned long cPanelBackground;
@@ -23,13 +25,16 @@ unsigned long cIconBackground;
 // Dimensions
 const unsigned int WINDOW_BORDER_WIDTH = 1;
 const unsigned int GAP_SIZE            = 4;
-const unsigned int ICON_COUNT          = 9;
+const unsigned int ICON_COUNT          = 5;
 const unsigned int ICON_SIZE           = 40;
 const unsigned int PANEL_WIDTH         = GAP_SIZE * 2 + (ICON_COUNT - 1) * GAP_SIZE + ICON_COUNT * ICON_SIZE;
 const unsigned int PANEL_HEIGHT        = ICON_SIZE + 2 * GAP_SIZE;
 const unsigned int PANEL_BOTTOM_OFFSET = 0;
 const unsigned int ITEM_WIDTH          = 160;
-const unsigned int ITEM_HEIGHT         = 32;
+const unsigned int ITEM_HEIGHT         = 24;
+
+// Texts
+const char* TERMINATE_TEXT = "Terminate u16panel";
 
 // Window and X11 Settings
 const bool  SHOW_UNDER     = false;
@@ -91,17 +96,24 @@ int main()
 
   XEvent event;
   int hoveredIndex = -1;
+  bool running = true;
   bool menuShown = false;
 
-  while (true)
+  while (running)
   {
     XNextEvent(display, &event);
     switch (event.type)
     {
       case Expose:
         {
-          if (event.xexpose.window != panelWindow) break;
-          renderIcons(-1);
+          if (event.xexpose.window == panelWindow)
+          {
+            renderIcons(-1);
+          }
+          else if (event.xexpose.window == menuWindow)
+          {
+            XDrawString(display, menuWindow, menuGC, 6, 16, TERMINATE_TEXT, strlen(TERMINATE_TEXT));
+          }
           break;
         }
       case MotionNotify:
@@ -118,6 +130,7 @@ int main()
         }
       case LeaveNotify:
         {
+          XSetForeground(display, panelGC, cIconBackground);
           renderIconAtIndex(hoveredIndex);
           hoveredIndex = -1;
           break;
@@ -126,9 +139,17 @@ int main()
         {
           if (event.xbutton.button == Button1)
           {
-            if (!menuShown) break;
-            hideMenu();
-            menuShown = false;
+            if (event.xbutton.window == menuWindow)
+            {
+              running = false;
+              break;
+            }
+            else
+            {
+              if (!menuShown) break;
+              hideMenu();
+              menuShown = false;
+            }
           }
           else if (event.xbutton.button == Button3)
           {
@@ -203,6 +224,8 @@ void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBord
     cBorder,
     cBackground
   );
+  menuGC = XCreateGC(display, menuWindow, 0, 0);
+  XSetForeground(display, menuGC, calculateRGB(255, 255, 255));
 
   XSetWindowAttributes menuAttributes;
   menuAttributes.override_redirect = true;
@@ -221,7 +244,6 @@ void showMenu()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XMapWindow(display, menuWindow);
-  XClearWindow(display, menuWindow);
 }
 
 void showMenuAt(int x, int y)
@@ -309,5 +331,6 @@ void freeObjects()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XFreeGC(display, panelGC);
+  XFreeGC(display, menuGC);
   XCloseDisplay(display);
 }
