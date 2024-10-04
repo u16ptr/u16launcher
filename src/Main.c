@@ -103,6 +103,8 @@ struct IconNode* createIcon(const char* name);
 void             addIcon(const char* name);
 struct IconNode* getIconByIndex(int index);
 unsigned int     getIconCount();
+void             moveIconToLeftByIndex(int index);
+void             moveIconToRightByIndex(int index);
 void             removeIconByIndex(int index);
 unsigned int     generateIconId();
 
@@ -113,7 +115,8 @@ struct IconNode* iconList = NULL;
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
 
 // Cleanup Functions
-void freeObjects();
+void freeTexts();
+void freeXObjects();
 
 int main()
 {
@@ -244,6 +247,12 @@ int main()
                   lastClickedPanelIndex = -1;
                   refreshPanel(iconCount, screenWidth, screenHeight);
                 }
+                else if (actionIndex == 1)
+                {
+                  moveIconToLeftByIndex(lastClickedPanelIndex);
+                  lastClickedPanelIndex = -1;
+                  refreshPanel(iconCount, screenWidth, screenHeight);
+                }
                 hideMenu();
                 menuShown = false;
                 hoveredMenuIndex = -1;
@@ -297,9 +306,8 @@ int main()
     }
   }
 
-  free(panelMenuTexts);
-  free(iconMenuTexts);
-  freeObjects();
+  freeTexts();
+  freeXObjects();
   return EXIT_SUCCESS;
 }
 
@@ -641,6 +649,44 @@ unsigned int getIconCount()
   return count;
 }
 
+void moveIconToLeftByIndex(int index)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  if (index <= 0 || iconList == NULL || iconList->next == NULL) return;
+
+  struct IconNode* previous = NULL;
+  struct IconNode* current = iconList;
+  struct IconNode* previousPrevious = NULL;
+
+  int currentIndex = 0;
+  while (current != NULL && currentIndex != index)
+  {
+    previousPrevious = previous;
+    previous = current;
+    current = current->next;
+    currentIndex++;
+  }
+
+  if (current == NULL) return;
+
+  if (previousPrevious != NULL)
+  {
+    previousPrevious->next = current;
+  }
+  else
+  {
+    iconList = current;
+  }
+
+  previous->next = current->next;
+  current->next = previous;
+}
+
+void moveIconToRightByIndex(int index)
+{
+  
+}
+
 void removeIconByIndex(int index)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
@@ -693,7 +739,13 @@ unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
   return blue + (green << 8) + (red << 16);
 }
 
-void freeObjects()
+void freeTexts()
+{
+  free(panelMenuTexts);
+  free(iconMenuTexts);
+}
+
+void freeXObjects()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XFreeGC(display, panelGC);
