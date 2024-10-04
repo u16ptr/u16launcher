@@ -58,8 +58,6 @@ struct CurrentMenu
 struct IconNode
 {
   Pixmap pixelMap;
-  int w;
-  int h;
   char* name;
   unsigned int id;
   struct IconNode* next;
@@ -107,7 +105,8 @@ int calculateIconIndexFromMouseX(int relMouseX, int iconCount);
 int calculateItemIndexFromMouseY(int relMouseY, unsigned int itemCount);
 
 // Icon Functions
-void             loadPixelMap(struct IconNode* icon, const char* filePath);
+void             loadPixelMap(Pixmap* map, const char* filePath, int* width, int* height);
+void             scalePixelMap(Pixmap* baseMap, int baseWidth, int baseHeight, int newWidth, int newHeight);
 struct IconNode* createIcon(const char* name);
 void             addIcon(const char* name);
 struct IconNode* getIconByIndex(int index);
@@ -563,7 +562,7 @@ void renderIconIdAtIndex(int index)
   int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
   char* idBuffer = (char*)malloc(sizeof(4));
   snprintf(idBuffer, 4, "%d", icon->id);
-  XCopyArea(display, icon->pixelMap, panelWindow, panelGC, 0, 0, icon->w, icon->h, iconX, GAP_SIZE);
+  XCopyArea(display, icon->pixelMap, panelWindow, panelGC, 0, 0, 32, 32, iconX, GAP_SIZE);
   XDrawString(display, panelWindow, panelGC, iconX + 4, GAP_SIZE + 10 + 4, idBuffer, strlen(idBuffer));
   free(idBuffer);
 }
@@ -639,21 +638,45 @@ int calculateItemIndexFromMouseY(int relMouseY, unsigned int itemCount)
   return relMouseY / ITEM_HEIGHT;
 }
 
-void loadPixelMap(struct IconNode* icon, const char* filePath)
+void loadPixelMap(Pixmap* map, const char* filePath, int* width, int* height)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+
   XpmAttributes attributes;
   attributes.valuemask = XpmSize;
 
-  int result = XpmReadFileToPixmap(display, panelWindow, filePath, &icon->pixelMap, NULL, &attributes);
+  int result = XpmReadFileToPixmap(display, panelWindow, filePath, map, NULL, &attributes);
   if (result == XpmSuccess)
   {
-    icon->w = attributes.width;
-    icon->h = attributes.height;
+    *width = attributes.width;
+    *height = attributes.height;
     return;
   }
   fprintf(stderr, "Failed to load icon: %s!\n", filePath);
-  icon->pixelMap = None;
+}
+
+void scalePixelMap(Pixmap* baseMap, int baseWidth, int baseHeight, int newWidth, int newHeight)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  Pixmap scaledPixmap = XCreatePixmap(display, panelWindow, newWidth, newHeight, DefaultDepth(display, DefaultScreen(display)));
+  GC gc = XCreateGC(display, scaledPixmap, 0, NULL);
+
+  float xScale = (float)newWidth / (float)baseWidth;
+  float yScale = (float)newHeight / (float)baseHeight;
+
+  for (int y = 0; y < newHeight; y++)
+  {
+    for (int x = 0; x < newWidth; x++)
+    {
+      int sourceX = (int)(x / xScale);
+      int sourceY = (int)(y / yScale);
+      XCopyArea(display, *baseMap, scaledPixmap, gc, sourceX, sourceY, 1, 1, x, y);
+    }
+  }
+
+  XFreeGC(display, gc);
+  XFreePixmap(display, *baseMap);
+  *baseMap = scaledPixmap;
 }
 
 struct IconNode* createIcon(const char* name)
@@ -663,8 +686,6 @@ struct IconNode* createIcon(const char* name)
   strcpy(allocatedName, name);
   struct IconNode* icon = (struct IconNode*)malloc(sizeof(struct IconNode));
   icon->pixelMap = None;
-  icon->w = 0;
-  icon->h = 0;
   icon->name = allocatedName;
   icon->id = -1;
   icon->next = NULL;
@@ -676,7 +697,14 @@ void addIcon(const char* name)
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   struct IconNode* newNode = createIcon(name);
   newNode->id = generateIconId();
-  loadPixelMap(newNode, "icon.xpm");
+
+  Pixmap map = None;
+  int mapWidth = 0;
+  int mapHeight = 0;
+  loadPixelMap(&map, "icon.xpm", &mapWidth, &mapHeight);
+  scalePixelMap(&map, mapWidth, mapHeight, 32, 32);
+  newNode->pixelMap = map;
+  
   if (iconList == NULL)
   {
     iconList = newNode;
