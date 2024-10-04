@@ -84,6 +84,10 @@ void showMenuAt(int x, int y, const char** menuTexts, unsigned int itemCount);
 void clearMenu();
 void hideMenu();
 
+// Pointer Functions
+void grabPointer();
+void releasePointer();
+
 // Render Functions
 void renderIconAtIndex(int index);
 void renderIconHoverAtIndex(int index);
@@ -167,6 +171,7 @@ int main()
   };
   bool running = true;
   bool menuShown = false;
+  bool mouseInsideMenu = false;
 
   while (running)
   {
@@ -201,7 +206,7 @@ int main()
               renderIconIdAtIndex(hoveredPanelIndex);
             }
           }
-          else if (event.xmotion.window == menuWindow && currentMenu.texts != NULL)
+          else if (event.xmotion.window == menuWindow && currentMenu.texts != NULL && mouseInsideMenu)
           {
             int calculatedIndex = calculateItemIndexFromMouseY(event.xmotion.y, currentMenu.itemCount);
             if (hoveredMenuIndex != calculatedIndex)
@@ -214,20 +219,29 @@ int main()
           }
           break;
         }
+      case EnterNotify:
+        {
+          if (event.xcrossing.window == menuWindow)
+          {
+            mouseInsideMenu = true;
+          }
+          break;
+        }
       case LeaveNotify:
         {
-          if (((XCrossingEvent*)&event)->window == panelWindow)
+          if (event.xcrossing.window == panelWindow)
           {
             XSetForeground(display, panelGC, cIconBackground);
             renderIconAtIndex(hoveredPanelIndex);
             renderIconIdAtIndex(hoveredPanelIndex);
             hoveredPanelIndex = -1;
           }
-          else if (((XCrossingEvent*)&event)->window == menuWindow)
+          else if (event.xcrossing.window == menuWindow)
           {
             clearMenu();
             renderMenuItems(*(currentMenu.texts), currentMenu.itemCount);
             hoveredMenuIndex = -1;
+            mouseInsideMenu = false;
           }
           break;
         }
@@ -235,7 +249,7 @@ int main()
         {
           if (event.xbutton.button == Button1)
           {
-            if (event.xbutton.window == menuWindow && event.xbutton.y < currentMenu.itemCount * ITEM_HEIGHT)
+            if (event.xbutton.window == menuWindow && event.xbutton.y < currentMenu.itemCount * ITEM_HEIGHT && mouseInsideMenu)
             {
               int actionIndex = event.xbutton.y / ITEM_HEIGHT;
               if (currentMenu.id == iconMenuId)
@@ -306,6 +320,7 @@ int main()
             showMenuAt(event.xbutton.x_root, event.xbutton.y_root, *currentMenu.texts, currentMenu.itemCount);
             lastClickedPanelIndex = calculateIconIndexFromMouseX(event.xbutton.x, iconCount);
             menuShown = true;
+            mouseInsideMenu = true;
           }
           break;
         }
@@ -398,7 +413,7 @@ void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBord
   XSetWindowAttributes menuAttributes;
   menuAttributes.override_redirect = true;
   XChangeWindowAttributes(display, menuWindow, CWOverrideRedirect, &menuAttributes);
-  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask | PointerMotionMask | LeaveWindowMask);
+  XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask);
 }
 
 void showPanel()
@@ -431,6 +446,7 @@ void showMenu()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XMapWindow(display, menuWindow);
+  grabPointer();
 }
 
 void showMenuAt(int x, int y, const char** menuTexts, unsigned int itemCount)
@@ -451,6 +467,27 @@ void hideMenu()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XUnmapWindow(display, menuWindow);
+  releasePointer();
+}
+
+void grabPointer()
+{
+  XGrabPointer(
+    display,
+    menuWindow,
+    false,
+    ButtonPressMask | ButtonReleaseMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask,
+    GrabModeAsync,
+    GrabModeAsync,
+    None,
+    None,
+    CurrentTime
+  );
+}
+
+void releasePointer()
+{
+  XUngrabPointer(display, CurrentTime);
 }
 
 void renderIconAtIndex(int index)
@@ -548,7 +585,7 @@ void renderMenuHoverAtIndex(int index)
   XFillRectangle(
     display,
     menuWindow,
-    panelGC,
+    menuGC,
     0,
     index * ITEM_HEIGHT,
     ITEM_WIDTH,
