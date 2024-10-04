@@ -28,8 +28,10 @@ unsigned long cIconHover;
 // Dimensions
 const unsigned int WINDOW_BORDER_WIDTH = 1;
 const unsigned int GAP_SIZE            = 4;
-const unsigned int ICON_SIZE           = 40;
-const unsigned int PANEL_HEIGHT        = ICON_SIZE + 2 * GAP_SIZE;
+const unsigned int ICON_BOX_SIZE       = 40;
+const unsigned int ICON_SIZE           = 32;
+const unsigned int ICON_INSET          = (ICON_BOX_SIZE - ICON_SIZE) / 2;
+const unsigned int PANEL_HEIGHT        = ICON_BOX_SIZE + 2 * GAP_SIZE;
 const unsigned int PANEL_BOTTOM_OFFSET = 0;
 const unsigned int ITEM_WIDTH          = 160;
 const unsigned int ITEM_HEIGHT         = 24;
@@ -68,8 +70,9 @@ const bool  SHOW_UNDER     = false;
 const char* X_DISPLAY_NAME = ":0";
 
 // Debugging
-const bool DEBUG_FUNCTIONS        = true;
+const bool DEBUG_FUNCTIONS        = false;
 const bool DEBUG_MOTION_FUNCTIONS = false;
+const bool DEBUG_RENDER_ICON_IDS  = false;
 
 // Initializer Functions
 void initializeColors();
@@ -94,6 +97,8 @@ void releasePointer();
 void renderIconAtIndex(int index);
 void renderIconHoverAtIndex(int index);
 void renderIcons(int hoveredIndex);
+void renderIconPixelMapAtIndex(int index);
+void renderIconPixelMaps(struct IconNode* iconList);
 void renderIconIdAtIndex(int index);
 void renderIconIds(struct IconNode* iconList);
 void renderMenuHoverAtIndex(int index);
@@ -189,6 +194,7 @@ int main()
           if (event.xexpose.window == panelWindow)
           {
             renderIcons(-1);
+            renderIconPixelMaps(iconList);
             renderIconIds(iconList);
           }
           else if (event.xexpose.window == menuWindow && currentMenu.texts != NULL)
@@ -206,9 +212,11 @@ int main()
             if (hoveredPanelIndex != calculatedIndex)
             {
               renderIconAtIndex(hoveredPanelIndex);
+              renderIconPixelMapAtIndex(hoveredPanelIndex);
               renderIconIdAtIndex(hoveredPanelIndex);
               hoveredPanelIndex = calculatedIndex;
               renderIconHoverAtIndex(hoveredPanelIndex);
+              renderIconPixelMapAtIndex(hoveredPanelIndex);
               renderIconIdAtIndex(hoveredPanelIndex);
             }
           }
@@ -239,6 +247,7 @@ int main()
           {
             XSetForeground(display, panelGC, cIconBackground);
             renderIconAtIndex(hoveredPanelIndex);
+            renderIconPixelMapAtIndex(hoveredPanelIndex);
             renderIconIdAtIndex(hoveredPanelIndex);
             hoveredPanelIndex = -1;
           }
@@ -311,6 +320,16 @@ int main()
           }
           else if (event.xbutton.button == Button3)
           {
+            if (menuShown)
+            {
+              if (!mouseInsideMenu)
+              {
+                hideMenu();
+                menuShown = false;
+                hoveredMenuIndex = -1;
+              }
+              break;
+            }
             if (((XButtonEvent*)&event)->state & ShiftMask)
             {
               currentMenu.texts = &panelMenuTexts;
@@ -500,7 +519,7 @@ void releasePointer()
 void renderIconAtIndex(int index)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
-  int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
+  int iconX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE;
   int iconY = GAP_SIZE;
   XSetForeground(display, panelGC, cIconBackground);
   XFillRectangle(
@@ -509,15 +528,15 @@ void renderIconAtIndex(int index)
     panelGC,
     iconX,
     iconY,
-    ICON_SIZE,
-    ICON_SIZE
+    ICON_BOX_SIZE,
+    ICON_BOX_SIZE
   );
 }
 
 void renderIconHoverAtIndex(int index)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
-  int hoverX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
+  int hoverX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE;
   int hoverY = GAP_SIZE;
   XSetForeground(display, panelGC, cIconHover);
   XFillRectangle(
@@ -526,8 +545,8 @@ void renderIconHoverAtIndex(int index)
     panelGC,
     hoverX,
     hoverY,
-    ICON_SIZE,
-    ICON_SIZE
+    ICON_BOX_SIZE,
+    ICON_BOX_SIZE
   );
   XSetForeground(display, panelGC, cIconBackground);
 }
@@ -553,21 +572,16 @@ void renderIcons(int hoveredIndex)
   }
 }
 
-void renderIconIdAtIndex(int index)
+void renderIconPixelMapAtIndex(int index)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   struct IconNode* icon = getIconByIndex(index);
   if (icon == NULL) return;
-  XSetForeground(display, panelGC, cMenuForeground);
-  int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
-  char* idBuffer = (char*)malloc(sizeof(4));
-  snprintf(idBuffer, 4, "%d", icon->id);
-  XCopyArea(display, icon->pixelMap, panelWindow, panelGC, 0, 0, 32, 32, iconX, GAP_SIZE);
-  XDrawString(display, panelWindow, panelGC, iconX + 4, GAP_SIZE + 10 + 4, idBuffer, strlen(idBuffer));
-  free(idBuffer);
+  int iconX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE + ICON_INSET;
+  XCopyArea(display, icon->pixelMap, panelWindow, panelGC, 0, 0, ICON_SIZE, ICON_SIZE, iconX, GAP_SIZE + ICON_INSET);
 }
 
-void renderIconIds(struct IconNode* iconList)
+void renderIconPixelMaps(struct IconNode* iconList)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   if (iconList == NULL) return;
@@ -578,7 +592,40 @@ void renderIconIds(struct IconNode* iconList)
 
   while (current != NULL)
   {
-    int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
+    int iconX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE;
+    renderIconPixelMapAtIndex(index);
+    index++;
+    current = current->next;
+  }
+}
+
+void renderIconIdAtIndex(int index)
+{
+  if (!DEBUG_RENDER_ICON_IDS) return;
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  struct IconNode* icon = getIconByIndex(index);
+  if (icon == NULL) return;
+  XSetForeground(display, panelGC, cMenuForeground);
+  int iconX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE;
+  char* idBuffer = (char*)malloc(sizeof(4));
+  snprintf(idBuffer, 4, "%d", icon->id);
+  XDrawString(display, panelWindow, panelGC, iconX + 2, GAP_SIZE + 10 + 2, idBuffer, strlen(idBuffer));
+  free(idBuffer);
+}
+
+void renderIconIds(struct IconNode* iconList)
+{
+  if (!DEBUG_RENDER_ICON_IDS) return;
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  if (iconList == NULL) return;
+
+  struct IconNode* current = iconList;
+  int index = 0;
+  int iconY = GAP_SIZE;
+
+  while (current != NULL)
+  {
+    int iconX = index * (ICON_BOX_SIZE + GAP_SIZE) + GAP_SIZE;
     renderIconIdAtIndex(index);
     index++;
     current = current->next;
@@ -614,7 +661,7 @@ void renderMenuItems(const char** menuItems, unsigned int itemCount)
 int calculatePanelWidth(int iconCount)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
-  return GAP_SIZE * 2 + (iconCount - 1) * GAP_SIZE + iconCount * ICON_SIZE;
+  return GAP_SIZE * 2 + (iconCount - 1) * GAP_SIZE + iconCount * ICON_BOX_SIZE;
 }
 
 int calculateIconIndexFromMouseX(int relMouseX, int iconCount)
@@ -623,9 +670,9 @@ int calculateIconIndexFromMouseX(int relMouseX, int iconCount)
   int iconIndex = 0;
   if (relMouseX < 0) { return -1; }
   if (
-    relMouseX > GAP_SIZE + GAP_SIZE / 2 + ICON_SIZE
+    relMouseX > GAP_SIZE + GAP_SIZE / 2 + ICON_BOX_SIZE
   )
-  { iconIndex = (relMouseX - GAP_SIZE / 2) / (ICON_SIZE + GAP_SIZE); }
+  { iconIndex = (relMouseX - GAP_SIZE / 2) / (ICON_BOX_SIZE + GAP_SIZE); }
   if (iconIndex == iconCount) iconIndex--;
   return iconIndex;
 }
@@ -702,7 +749,7 @@ void addIcon(const char* name)
   int mapWidth = 0;
   int mapHeight = 0;
   loadPixelMap(&map, "icon.xpm", &mapWidth, &mapHeight);
-  scalePixelMap(&map, mapWidth, mapHeight, 32, 32);
+  scalePixelMap(&map, mapWidth, mapHeight, ICON_SIZE, ICON_SIZE);
   newNode->pixelMap = map;
   
   if (iconList == NULL)
