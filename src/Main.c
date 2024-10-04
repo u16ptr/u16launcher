@@ -1,4 +1,5 @@
 #include <X11/Xlib.h>
+#include <X11/xpm.h>
 #include <X11/Xutil.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -56,6 +57,9 @@ struct CurrentMenu
 // Icon Node
 struct IconNode
 {
+  Pixmap pixelMap;
+  int w;
+  int h;
   char* name;
   unsigned int id;
   struct IconNode* next;
@@ -103,6 +107,7 @@ int calculateIconIndexFromMouseX(int relMouseX, int iconCount);
 int calculateItemIndexFromMouseY(int relMouseY, unsigned int itemCount);
 
 // Icon Functions
+void             loadPixelMap(struct IconNode* icon, const char* filePath);
 struct IconNode* createIcon(const char* name);
 void             addIcon(const char* name);
 struct IconNode* getIconByIndex(int index);
@@ -119,6 +124,7 @@ struct IconNode* iconList = NULL;
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
 
 // Cleanup Functions
+void freePixelMaps();
 void freeTexts();
 void freeXObjects();
 
@@ -132,18 +138,7 @@ int main()
   int screenWidth = DisplayWidth(display, screenNum);
   int screenHeight = DisplayHeight(display, screenNum);
 
-
-  // Icon Linked List
-  int currentId = 0;
-  addIcon("Icon 1");
-  addIcon("Icon 2");
-  addIcon("Icon 3");
-  addIcon("Icon 4");
-  addIcon("Icon 5");
-
-  int iconCount = getIconCount(iconList);
-  int panelWidth = calculatePanelWidth(iconCount);
-
+  int panelWidth = calculatePanelWidth(0);
   initializePanel(
     screenNum,
     screenWidth / 2 - panelWidth / 2,
@@ -152,6 +147,18 @@ int main()
     cPanelBackground,
     cPanelBorder
   );
+
+  // Icon Linked List
+  addIcon("Icon 1");
+  addIcon("Icon 2");
+  addIcon("Icon 3");
+  addIcon("Icon 4");
+  addIcon("Icon 5");
+
+  int iconCount = getIconCount(iconList);
+  panelWidth = calculatePanelWidth(iconCount);
+  refreshPanel(iconCount, screenWidth, screenHeight);
+
   initializeMenu(
     screenNum,
     cPanelBackground,
@@ -327,6 +334,7 @@ int main()
     }
   }
 
+  freePixelMaps();
   freeTexts();
   freeXObjects();
   return EXIT_SUCCESS;
@@ -555,6 +563,7 @@ void renderIconIdAtIndex(int index)
   int iconX = index * (ICON_SIZE + GAP_SIZE) + GAP_SIZE;
   char* idBuffer = (char*)malloc(sizeof(4));
   snprintf(idBuffer, 4, "%d", icon->id);
+  XCopyArea(display, icon->pixelMap, panelWindow, panelGC, 0, 0, icon->w, icon->h, iconX, GAP_SIZE);
   XDrawString(display, panelWindow, panelGC, iconX + 4, GAP_SIZE + 10 + 4, idBuffer, strlen(idBuffer));
   free(idBuffer);
 }
@@ -630,12 +639,32 @@ int calculateItemIndexFromMouseY(int relMouseY, unsigned int itemCount)
   return relMouseY / ITEM_HEIGHT;
 }
 
+void loadPixelMap(struct IconNode* icon, const char* filePath)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XpmAttributes attributes;
+  attributes.valuemask = XpmSize;
+
+  int result = XpmReadFileToPixmap(display, panelWindow, filePath, &icon->pixelMap, NULL, &attributes);
+  if (result == XpmSuccess)
+  {
+    icon->w = attributes.width;
+    icon->h = attributes.height;
+    return;
+  }
+  fprintf(stderr, "Failed to load icon: %s!\n", filePath);
+  icon->pixelMap = None;
+}
+
 struct IconNode* createIcon(const char* name)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   char* allocatedName = malloc(ICON_NAME_LIMIT * sizeof(char));
   strcpy(allocatedName, name);
   struct IconNode* icon = (struct IconNode*)malloc(sizeof(struct IconNode));
+  icon->pixelMap = None;
+  icon->w = 0;
+  icon->h = 0;
   icon->name = allocatedName;
   icon->id = -1;
   icon->next = NULL;
@@ -647,6 +676,7 @@ void addIcon(const char* name)
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   struct IconNode* newNode = createIcon(name);
   newNode->id = generateIconId();
+  loadPixelMap(newNode, "icon.xpm");
   if (iconList == NULL)
   {
     iconList = newNode;
@@ -809,6 +839,17 @@ unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   return blue + (green << 8) + (red << 16);
+}
+
+void freePixelMaps()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  struct IconNode* current = iconList;
+  while (current != NULL)
+  {
+    XFreePixmap(display, current->pixelMap);
+    current = current->next;
+  }
 }
 
 void freeTexts()
