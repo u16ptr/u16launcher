@@ -253,6 +253,12 @@ int main()
                   lastClickedPanelIndex = -1;
                   refreshPanel(iconCount, screenWidth, screenHeight);
                 }
+                else if (actionIndex == 2)
+                {
+                  moveIconToRightByIndex(lastClickedPanelIndex);
+                  lastClickedPanelIndex = -1;
+                  refreshPanel(iconCount, screenWidth, screenHeight);
+                }
                 hideMenu();
                 menuShown = false;
                 hoveredMenuIndex = -1;
@@ -684,7 +690,36 @@ void moveIconToLeftByIndex(int index)
 
 void moveIconToRightByIndex(int index)
 {
-  
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  if (iconList == NULL || iconList->next == NULL) return;
+
+  struct IconNode* previous = NULL;
+  struct IconNode* current = iconList;
+
+  int currentIndex = 0;
+
+  while (current != NULL && currentIndex < index)
+  {
+    previous = current;
+    current = current->next;
+    currentIndex++;
+  }
+
+  if (current == NULL || current->next == NULL) return;
+
+  struct IconNode* nextNode = current->next;
+
+  if (previous != NULL)
+  {
+    previous->next = nextNode;
+  }
+  else
+  {
+    iconList = nextNode;
+  }
+
+  current->next = nextNode->next;
+  nextNode->next = current;
 }
 
 void removeIconByIndex(int index)
@@ -741,6 +776,7 @@ unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
 
 void freeTexts()
 {
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   free(panelMenuTexts);
   free(iconMenuTexts);
 }
