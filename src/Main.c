@@ -122,8 +122,8 @@ void             moveIconToRightByIndex(int index);
 void             removeIconByIndex(int index);
 unsigned int     generateIconId();
 
-// Icon Linked List
-struct IconNode* iconList = NULL;
+// Program Functions
+void openTerminal();
 
 // Utility Functions
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
@@ -132,6 +132,9 @@ unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue);
 void freePixelMaps();
 void freeTexts();
 void freeXObjects();
+
+// Icon Linked List
+struct IconNode* iconList = NULL;
 
 int main()
 {
@@ -289,6 +292,10 @@ int main()
                   lastClickedPanelIndex = -1;
                   refreshPanel(iconCount, screenWidth, screenHeight);
                 }
+                else if (actionIndex == 3)
+                {
+                  openTerminal();
+                }
                 hideMenu();
                 menuShown = false;
                 hoveredMenuIndex = -1;
@@ -313,10 +320,16 @@ int main()
             }
             else
             {
-              if (!menuShown) break;
-              hideMenu();
-              menuShown = false;
-              hoveredMenuIndex = -1;
+              if (!menuShown)
+              {
+                openTerminal();
+              }
+              else
+              {
+                hideMenu();
+                menuShown = false;
+                hoveredMenuIndex = -1;
+              }
             }
           }
           else if (event.xbutton.button == Button3)
@@ -912,6 +925,11 @@ unsigned int generateIconId()
     }
   }
   return usedId;
+}
+
+void openTerminal()
+{
+  system("cd $HOME && alacritty &");
 }
 
 unsigned long calculateRGB(uint8_t red, u_int8_t green, uint8_t blue)
