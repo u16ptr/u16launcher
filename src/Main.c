@@ -12,8 +12,10 @@
 Display* display;
 Window panelWindow;
 Window menuWindow;
+Window dialogWindow;
 GC panelGC;
 GC menuGC;
+GC dialogGC;
 
 // Colors
 unsigned long cPanelBackground;
@@ -24,6 +26,9 @@ unsigned long cMenuHover;
 unsigned long cMenuBorder;
 unsigned long cIconBackground;
 unsigned long cIconHover;
+unsigned long cDialogBackground;
+unsigned long cDialogForeground;
+unsigned long cDialogBorder;
 
 // Dimensions
 const int WINDOW_BORDER_WIDTH = 1;
@@ -81,6 +86,7 @@ void initializeDisplay();
 void initilalizeMenuTexts();
 void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBorder);
 void initializePanel(int screenNum, int panelX, int panelY, int panelWidth, unsigned long cBackground, unsigned int cBorder);
+void initializeDialog(int screenNum, unsigned long cBackground, unsigned long cBorder);
 
 // Visibility Functions
 void showPanel();
@@ -89,6 +95,8 @@ void showMenu();
 void showMenuAt(int x, int y, int itemCount);
 void clearMenu();
 void hideMenu();
+void showDialog();
+void hideDialog();
 
 // Pointer Functions
 void grabPointer();
@@ -155,6 +163,17 @@ int main()
     cPanelBackground,
     cPanelBorder
   );
+  initializeMenu(
+    screenNum,
+    cMenuBackground,
+    cMenuBorder
+  );
+  initializeDialog(
+    screenNum,
+    cDialogBackground,
+    cDialogBorder
+  );
+  showPanel();
 
   // Icon Linked List
   addIcon("Icon 1");
@@ -166,13 +185,6 @@ int main()
   int iconCount = getIconCount(iconList);
   panelWidth = calculatePanelWidth(iconCount);
   refreshPanel(iconCount, screenWidth, screenHeight);
-
-  initializeMenu(
-    screenNum,
-    cPanelBackground,
-    cPanelBorder
-  );
-  showPanel();
 
   XEvent event;
   int hoveredPanelIndex = -1;
@@ -304,9 +316,12 @@ int main()
               {
                 if (actionIndex == 0 && iconCount < ICON_COUNT_LIMIT)
                 {
+                  showDialog();
+                  /*
                   addIcon("Icon");
                   iconCount++;
                   refreshPanel(iconCount, screenWidth, screenHeight);
+                  */
                 }
                 else if (actionIndex == 1)
                 {
@@ -318,7 +333,7 @@ int main()
               }
               break;
             }
-            else
+            else if (event.xbutton.window == panelWindow)
             {
               if (!menuShown)
               {
@@ -331,6 +346,17 @@ int main()
                 hoveredMenuIndex = -1;
               }
             }
+            else if (event.xbutton.window == dialogWindow)
+            {
+              hideDialog();
+            }
+            if (menuShown)
+            {
+              hideMenu();
+              menuShown = false;
+              hoveredMenuIndex = -1;
+            }
+            break;
           }
           else if (event.xbutton.button == Button3)
           {
@@ -383,6 +409,9 @@ void initializeColors()
   cMenuBorder = calculateRGB(139, 212, 156);
   cIconBackground = calculateRGB(34, 34, 34);
   cIconHover = calculateRGB(51, 51, 51);
+  cDialogBackground = calculateRGB(17, 17, 17);
+  cDialogBorder = calculateRGB(139, 212, 156);
+  cDialogBorder = calculateRGB(139, 212, 156);
 }
 
 void initializeDisplay()
@@ -456,6 +485,29 @@ void initializeMenu(int screenNum, unsigned long cBackground, unsigned int cBord
   XSelectInput(display, menuWindow, ExposureMask | ButtonPressMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask);
 }
 
+void initializeDialog(int screenNum, unsigned long cBackground, unsigned long cBorder)
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  dialogWindow = XCreateSimpleWindow(
+    display,
+    RootWindow(display, screenNum),
+    16,
+    16,
+    400,
+    200,
+    WINDOW_BORDER_WIDTH,
+    cBorder,
+    cBackground
+  );
+  dialogGC = XCreateGC(display, dialogWindow, 0, 0);
+  XSetForeground(display, dialogGC, cDialogForeground);
+
+  XSetWindowAttributes dialogAttributes;
+  dialogAttributes.override_redirect = true;
+  XChangeWindowAttributes(display, dialogWindow, CWOverrideRedirect, &dialogAttributes);
+  XSelectInput(display, dialogWindow, ExposureMask | ButtonPressMask);
+}
+
 void showPanel()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
@@ -507,6 +559,20 @@ void hideMenu()
 {
   if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
   XUnmapWindow(display, menuWindow);
+  releasePointer();
+}
+
+void showDialog()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XMapWindow(display, dialogWindow);
+  XClearWindow(display, dialogWindow);
+}
+
+void hideDialog()
+{
+  if (DEBUG_FUNCTIONS) printf("%s\n", __func__);
+  XUnmapWindow(display, dialogWindow);
   releasePointer();
 }
 
